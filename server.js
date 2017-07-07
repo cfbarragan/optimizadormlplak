@@ -1,76 +1,49 @@
-var http = require('http');
 var fs = require('fs');
 var pImage = require('pureimage');
-var req = require('request');
-var port = process.env.PORT || 8000;
+var bodyParser = require('body-parser');
+var express = require('express');
+var port =  8000;
 var image;
 var images = [];
 var ctx;
 var siteUrl = 'https://optimizador-mlplak.herokuapp.com/';
+var app = express();
 var fnt = pImage.registerFont('Calibri.ttf', 'Calibri');
 fnt.loadSync();
 
-http.createServer(function(request, response) {
-	// console.log('url: ', request.url)
-	switch (request.method) {
-		case "GET":
-			if (request.url === '/') {
-				response.writeHead(200, {'Content-Type': 'text/html'});
-				response.write('<html><body><h1>Optimizador de corte</h1><div><span>Estado del optimizador: </span><span style="color:green">ONLINE</span></div></body></html>');
-			} else {
-			}
-			break;
-		case "POST":
-			if (request.url === '/optimizar') {
-				var requestBody = '';
-				request.on('data', function(data) {
-					requestBody += data;
-					if (requestBody.length > 1e7) { //10mb
-						response.writeHead(413, 'Request Entity Too Large');
-						response.end();
-					} 
-				});
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
 
-				request.on('end', function(data) {
-					var parsedData = JSON.parse(requestBody);
-					// del request que me hicieron (POST), creo el request (GET) a placacentro
-					var requestUrl = createOptimizerRequestUrl(parsedData);
+app.route('/')
+.get(function(req, res){
+	res.status(200).send('<html><body><h1>Optimizador de corte</h1><div><span>Estado del optimizador: </span><span style="color:green">ONLINE</span></div></body></html>');
+});
 
-					// envio request a placacentro
-					req(requestUrl, function (error, r, body) {
-						var cortes = JSON.parse(body);
+app.route('/optimizar')
+.post(function(req,res){
+		var parsedData = req.body;
+		// del request que me hicieron (POST), creo el request (GET) a placacentro
+		var requestUrl = createOptimizerRequestUrl(parsedData);
+		res.get(requestUrl, function (req, res) {
+						var cortes = JSON.parse(res.body);
 						drawOptimization(parsedData.nombreProyecto, parsedData.placa.ancho, parsedData.placa.alto, cortes);
 
-console.log(body);
+						console.log(res.body);
 
-var res = {
-	nombreProyecto: parsedData.nombreProyecto,
-	placas: [
-		{ imagen: siteUrl + images[0], cubierto: cortes[0].cover} // hacerlo para todas las imagenes
-	]
-};
-response.writeHead(200, {'Content-Type': 'application/json'});
-response.write(JSON.stringify(res));
-response.end();
-
-
+						var res = {
+							nombreProyecto: parsedData.nombreProyecto,
+							placas: [
+								{ imagen: siteUrl + images[0], cubierto: cortes[0].cover} // hacerlo para todas las imagenes
+							]
+						};
+						
+						res.status(200).JSON(JSON.stringify(res))
 					});
-				});
+});
 
-			} else {
-				response.writeHead(404);
-				response.end();
-			}
-
-			break;
-		case "HEAD":
-			break;			
-		default:
-			response.writeHead(405, 'Method Not Allowed');
-			break;
-	}
-	// response.end();
-}).listen(port);
+app.listen(port,function(){
+	console.log("App running on port: " + port);
+});
 
 function createOptimizerRequestUrl(jsonRequest) {
 	var baseUrl = 'http://www.placacentro.com/optimizador.exe';
